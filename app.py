@@ -46,13 +46,35 @@ async def process_questions(
         except Exception as e:
             raise HTTPException(status_code=400, detail=f"Error reading data.csv: {str(e)}")
     
-    # Create the full prompt
-    full_prompt = "Process the following data and respond with only a single valid JSON object or array, no additional text or explanation:\n\n" + "\n\n".join(prompt_parts)
+    # Create the full prompt with better context
+    full_prompt = """You are a data analyst. Analyze the provided data carefully and respond with only a single valid JSON array or object containing the requested results. Be precise with calculations and use the actual data provided.
+
+IMPORTANT: 
+- Perform actual calculations, don't make assumptions
+- Use exact values from the data
+- Return only valid JSON, no explanations or extra text
+- If you need to compute correlations, use the actual numerical data
+- If generating visualizations, create them based on the real data patterns
+
+Data to analyze:
+""" + "\n\n".join(prompt_parts)
     
-    # Generate response using Gemini
+    # Generate response using Gemini with better configuration
     try:
         model = genai.GenerativeModel('gemini-2.0-flash-lite')
-        response = model.generate_content(full_prompt)
+        
+        # Configure generation parameters for better accuracy
+        generation_config = genai.types.GenerationConfig(
+            temperature=0.1,  # Lower temperature for more consistent results
+            top_p=0.8,
+            top_k=20,
+            max_output_tokens=8192,
+        )
+        
+        response = model.generate_content(
+            full_prompt,
+            generation_config=generation_config
+        )
         
         if not response.text:
             raise HTTPException(status_code=500, detail="No response from Gemini API")
