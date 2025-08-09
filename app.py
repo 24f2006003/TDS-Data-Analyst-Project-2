@@ -10,6 +10,48 @@ import uvicorn
 
 app = FastAPI()
 
+def extract_json_from_text(text):
+    """Extract JSON from text that might contain markdown or other formatting"""
+    
+    # Remove markdown code blocks
+    if "```json" in text:
+        start = text.find("```json") + 7
+        end = text.find("```", start)
+        if end != -1:
+            text = text[start:end].strip()
+    elif "```" in text:
+        start = text.find("```") + 3
+        end = text.find("```", start)
+        if end != -1:
+            text = text[start:end].strip()
+    
+    # Try parsing the cleaned text first
+    try:
+        return json.loads(text)
+    except json.JSONDecodeError:
+        pass
+    
+    # Fall back to finding JSON arrays
+    start_idx = text.find('[')
+    end_idx = text.rfind(']') + 1
+    if start_idx != -1 and end_idx > start_idx:
+        try:
+            return json.loads(text[start_idx:end_idx])
+        except json.JSONDecodeError:
+            pass
+    
+    # Then try JSON objects
+    start_idx = text.find('{')
+    end_idx = text.rfind('}') + 1
+    if start_idx != -1 and end_idx > start_idx:
+        try:
+            return json.loads(text[start_idx:end_idx])
+        except json.JSONDecodeError:
+            pass
+    
+    # If all else fails, return error
+    raise ValueError("Could not extract valid JSON from response")
+
 @app.post("/api/")
 async def process_questions(
     questions_txt: UploadFile = File(alias="questions.txt"),
@@ -71,7 +113,7 @@ async def process_questions(
                     if headers and rows:
                         scraped_data = f"Scraped Data from {url}:\n"
                         scraped_data += ",".join(headers) + "\n"
-                        for row in rows[:50]:  # Limit to first 50 rows to avoid token limits
+                        for row in rows[:100]:  # Increased limit for better analysis
                             scraped_data += ",".join(row) + "\n"
                         
             except Exception as e:
@@ -98,41 +140,36 @@ async def process_questions(
         except Exception as e:
             raise HTTPException(status_code=400, detail=f"Error reading data.csv: {str(e)}")
     
-    # Create the full prompt with better context
-    full_prompt = f"""You are a data analyst with web scraping and data analysis capabilities. 
+    # Create the full prompt with strict formatting requirements
+    full_prompt = f"""You are a data analyst with web scraping and data analysis capabilities.
 
-For the following request, if it involves scraping data from a URL:
-1. First scrape/fetch the data from the specified URL
-2. Then perform the requested analysis on that data
-3. Return only a valid JSON array or object with the exact results requested
+CRITICAL INSTRUCTIONS:
+- Respond with ONLY valid JSON - no markdown code blocks, no explanations, no extra text
+- Do NOT wrap response in ```json``` or ``` blocks
+- Return raw JSON array or object only
+- For visualizations: return as base64 data URI in the JSON
 
-If you need to create visualizations:
-- Generate actual plots using the scraped data
-- Return as base64 encoded PNG data URI format
-- Keep file size under 100KB
-
-IMPORTANT: 
-- Actually fetch and use real data from URLs when specified
-- Perform precise calculations on the actual data
-- Return only valid JSON, no explanations or extra text
-- Use exact numerical values, not approximations
+For web scraping requests:
+1. Use the provided scraped data below
+2. Perform precise analysis on the actual data
+3. Return exact numerical values, not approximations
+4. For plots: generate actual matplotlib plots as base64 PNG data URI under 100KB
 
 Request to process:
 {questions_text}
 
-Additional data files:
 """ + "\n".join([part for part in prompt_parts[1:] if part])
     
-    # Generate response using Gemini with better configuration
+    # Generate response using Gemini with stricter configuration
     try:
         model = genai.GenerativeModel('gemini-2.5-flash')
         
-        # Configure generation parameters for better accuracy
+        # Configure for more consistent JSON output
         generation_config = genai.types.GenerationConfig(
-            temperature=0.2,  # Slightly higher for web scraping tasks
-            top_p=0.9,
-            top_k=40,
-            max_output_tokens=16384,  # More tokens for complex data analysis
+            temperature=0.0,  # Very low for consistent formatting
+            top_p=0.8,
+            top_k=20,
+            max_output_tokens=16384,
         )
         
         response = model.generate_content(
@@ -145,43 +182,25 @@ Additional data files:
         
         generated_text = response.text.strip()
         
-        # Parse the JSON response from Gemini
+        # Use improved JSON extraction
         try:
-            json_response = json.loads(generated_text)
+            json_response = extract_json_from_text(generated_text)
             return json_response
-        except json.JSONDecodeError:
-            # If JSON parsing fails, try to extract JSON from the text
-            text = generated_text
             
-            # Try to find and extract JSON array first
-            start_idx = text.find('[')
-            end_idx = text.rfind(']') + 1
-            if start_idx != -1 and end_idx > start_idx:
-                try:
-                    json_response = json.loads(text[start_idx:end_idx])
-                    return json_response
-                except json.JSONDecodeError:
-                    pass
-            
-            # Then try JSON object
-            start_idx = text.find('{')
-            end_idx = text.rfind('}') + 1
-            if start_idx != -1 and end_idx > start_idx:
-                try:
-                    json_response = json.loads(text[start_idx:end_idx])
-                    return json_response
-                except json.JSONDecodeError:
-                    pass
-            
+        except ValueError as e:
             # Return the raw text wrapped in an error object if JSON parsing completely fails
-            return {"error": "Could not parse JSON", "raw_response": generated_text}
+            return {
+                "error": "Could not parse JSON", 
+                "raw_response": generated_text[:1000],  # Truncate for readability
+                "details": str(e)
+            }
             
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error calling Gemini API: {str(e)}")
 
 @app.get("/")
 async def health_check():
-    return {"status": "healthy"}
+    return {"status": "healthy", "version": "1.1"}
 
 if __name__ == "__main__":
     uvicorn.run(app, host="0.0.0.0", port=int(os.getenv("PORT", 8000)))
