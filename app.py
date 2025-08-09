@@ -47,17 +47,29 @@ async def process_questions(
             raise HTTPException(status_code=400, detail=f"Error reading data.csv: {str(e)}")
     
     # Create the full prompt with better context
-    full_prompt = """You are a data analyst. Analyze the provided data carefully and respond with only a single valid JSON array or object containing the requested results. Be precise with calculations and use the actual data provided.
+    full_prompt = f"""You are a data analyst with web scraping and data analysis capabilities. 
+
+For the following request, if it involves scraping data from a URL:
+1. First scrape/fetch the data from the specified URL
+2. Then perform the requested analysis on that data
+3. Return only a valid JSON array or object with the exact results requested
+
+If you need to create visualizations:
+- Generate actual plots using the scraped data
+- Return as base64 encoded PNG data URI format
+- Keep file size under 100KB
 
 IMPORTANT: 
-- Perform actual calculations, don't make assumptions
-- Use exact values from the data
+- Actually fetch and use real data from URLs when specified
+- Perform precise calculations on the actual data
 - Return only valid JSON, no explanations or extra text
-- If you need to compute correlations, use the actual numerical data
-- If generating visualizations, create them based on the real data patterns
+- Use exact numerical values, not approximations
 
-Data to analyze:
-""" + "\n\n".join(prompt_parts)
+Request to process:
+{questions_text}
+
+Additional data files:
+""" + "\n".join([part for part in prompt_parts[1:] if part])
     
     # Generate response using Gemini with better configuration
     try:
@@ -65,10 +77,10 @@ Data to analyze:
         
         # Configure generation parameters for better accuracy
         generation_config = genai.types.GenerationConfig(
-            temperature=0.1,  # Lower temperature for more consistent results
-            top_p=0.8,
-            top_k=20,
-            max_output_tokens=8192,
+            temperature=0.2,  # Slightly higher for web scraping tasks
+            top_p=0.9,
+            top_k=40,
+            max_output_tokens=16384,  # More tokens for complex data analysis
         )
         
         response = model.generate_content(
@@ -88,16 +100,8 @@ Data to analyze:
         except json.JSONDecodeError:
             # If JSON parsing fails, try to extract JSON from the text
             text = generated_text
-            start_idx = text.find('{')
-            end_idx = text.rfind('}') + 1
-            if start_idx != -1 and end_idx > start_idx:
-                try:
-                    json_response = json.loads(text[start_idx:end_idx])
-                    return json_response
-                except json.JSONDecodeError:
-                    pass
             
-            # Check for array format
+            # Try to find and extract JSON array first
             start_idx = text.find('[')
             end_idx = text.rfind(']') + 1
             if start_idx != -1 and end_idx > start_idx:
@@ -107,7 +111,18 @@ Data to analyze:
                 except json.JSONDecodeError:
                     pass
             
-            raise HTTPException(status_code=500, detail="Gemini did not return valid JSON")
+            # Then try JSON object
+            start_idx = text.find('{')
+            end_idx = text.rfind('}') + 1
+            if start_idx != -1 and end_idx > start_idx:
+                try:
+                    json_response = json.loads(text[start_idx:end_idx])
+                    return json_response
+                except json.JSONDecodeError:
+                    pass
+            
+            # Return the raw text wrapped in an error object if JSON parsing completely fails
+            return {"error": "Could not parse JSON", "raw_response": generated_text}
             
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error calling Gemini API: {str(e)}")
