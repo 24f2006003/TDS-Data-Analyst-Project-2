@@ -14,40 +14,71 @@ def extract_json_from_text(text):
     """Extract JSON from text that might contain markdown or other formatting"""
     
     # Remove markdown code blocks
-    if "```json" in text:
-        start = text.find("```json") + 7
-        end = text.find("```", start)
+    cleaned_text = text
+    if "```json" in cleaned_text:
+        start = cleaned_text.find("```json") + 7
+        end = cleaned_text.find("```", start)
         if end != -1:
-            text = text[start:end].strip()
-    elif "```" in text:
-        start = text.find("```") + 3
-        end = text.find("```", start)
+            cleaned_text = cleaned_text[start:end].strip()
+    elif "```" in cleaned_text:
+        start = cleaned_text.find("```") + 3
+        end = cleaned_text.find("```", start)
         if end != -1:
-            text = text[start:end].strip()
+            cleaned_text = cleaned_text[start:end].strip()
     
     # Try parsing the cleaned text first
     try:
-        return json.loads(text)
-    except json.JSONDecodeError:
-        pass
+        return json.loads(cleaned_text)
+    except json.JSONDecodeError as e:
+        print(f"JSON decode error on cleaned text: {e}")
+        print(f"Cleaned text preview: {cleaned_text[:200]}...")
     
-    # Fall back to finding JSON arrays
-    start_idx = text.find('[')
-    end_idx = text.rfind(']') + 1
-    if start_idx != -1 and end_idx > start_idx:
-        try:
-            return json.loads(text[start_idx:end_idx])
-        except json.JSONDecodeError:
-            pass
+    # Try to find and extract complete JSON structures
+    # Look for JSON arrays first
+    array_start = cleaned_text.find('[')
+    if array_start != -1:
+        # Find the matching closing bracket by counting brackets
+        bracket_count = 0
+        array_end = -1
+        for i, char in enumerate(cleaned_text[array_start:], array_start):
+            if char == '[':
+                bracket_count += 1
+            elif char == ']':
+                bracket_count -= 1
+                if bracket_count == 0:
+                    array_end = i + 1
+                    break
+        
+        if array_end != -1:
+            json_candidate = cleaned_text[array_start:array_end]
+            try:
+                return json.loads(json_candidate)
+            except json.JSONDecodeError as e:
+                print(f"JSON decode error on array: {e}")
+                print(f"Array candidate preview: {json_candidate[:200]}...")
     
-    # Then try JSON objects
-    start_idx = text.find('{')
-    end_idx = text.rfind('}') + 1
-    if start_idx != -1 and end_idx > start_idx:
-        try:
-            return json.loads(text[start_idx:end_idx])
-        except json.JSONDecodeError:
-            pass
+    # Try JSON objects
+    object_start = cleaned_text.find('{')
+    if object_start != -1:
+        # Find the matching closing brace by counting braces
+        brace_count = 0
+        object_end = -1
+        for i, char in enumerate(cleaned_text[object_start:], object_start):
+            if char == '{':
+                brace_count += 1
+            elif char == '}':
+                brace_count -= 1
+                if brace_count == 0:
+                    object_end = i + 1
+                    break
+        
+        if object_end != -1:
+            json_candidate = cleaned_text[object_start:object_end]
+            try:
+                return json.loads(json_candidate)
+            except json.JSONDecodeError as e:
+                print(f"JSON decode error on object: {e}")
+                print(f"Object candidate preview: {json_candidate[:200]}...")
     
     # If all else fails, return error
     raise ValueError("Could not extract valid JSON from response")
@@ -148,12 +179,14 @@ CRITICAL INSTRUCTIONS:
 - Do NOT wrap response in ```json``` or ``` blocks
 - Return raw JSON array or object only
 - For visualizations: return as base64 data URI in the JSON
+- Ensure the entire response is complete valid JSON - do not truncate
 
 For web scraping requests:
 1. Use the provided scraped data below
 2. Perform precise analysis on the actual data
 3. Return exact numerical values, not approximations
-4. For plots: generate actual matplotlib plots as base64 PNG data URI under 100KB
+4. For plots: generate actual matplotlib plots as base64 PNG data URI under 50KB (keep it smaller)
+5. Make sure base64 strings are complete and not cut off
 
 Request to process:
 {questions_text}
@@ -162,14 +195,14 @@ Request to process:
     
     # Generate response using Gemini with stricter configuration
     try:
-        model = genai.GenerativeModel('gemini-2.5-flash')
+        model = genai.GenerativeModel('gemini-2.5-flash')  # Updated model
         
         # Configure for more consistent JSON output
         generation_config = genai.types.GenerationConfig(
             temperature=0.0,  # Very low for consistent formatting
             top_p=0.8,
             top_k=20,
-            max_output_tokens=16384,
+            max_output_tokens=32768,  # Increased token limit for complete responses
         )
         
         response = model.generate_content(
@@ -188,10 +221,24 @@ Request to process:
             return json_response
             
         except ValueError as e:
+            # Debug: Let's see what's actually in the response
+            print(f"Generated text length: {len(generated_text)}")
+            print(f"Generated text preview: {generated_text[:500]}")
+            print(f"Generated text ending: {generated_text[-200:]}")
+            
+            # Try one more fallback - maybe it's just valid JSON with whitespace
+            try:
+                # Strip all whitespace and try direct parsing
+                stripped_text = generated_text.strip()
+                return json.loads(stripped_text)
+            except json.JSONDecodeError:
+                pass
+            
             # Return the raw text wrapped in an error object if JSON parsing completely fails
             return {
                 "error": "Could not parse JSON", 
-                "raw_response": generated_text[:1000],  # Truncate for readability
+                "raw_response": generated_text[:500],  # Increased limit
+                "response_length": len(generated_text),
                 "details": str(e)
             }
             
