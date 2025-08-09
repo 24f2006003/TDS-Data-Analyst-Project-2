@@ -104,18 +104,19 @@ async def process_questions(
     full_prompt = f"""You are a data analyst with web scraping and data analysis capabilities.
 
 CRITICAL INSTRUCTIONS:
-- Respond with ONLY valid JSON - no markdown code blocks, no explanations, no extra text
-- Do NOT wrap response in ```json``` or ``` blocks
-- Return raw JSON array or object only
-- For visualizations: return as base64 data URI in the JSON
-- Ensure the entire response is complete valid JSON - do not truncate
+- Respond with ONLY a valid JSON array or object - no markdown, no explanations, no extra text
+- Do NOT use line breaks (\\n) or extra whitespace in your JSON response
+- Make JSON compact and properly formatted
+- For base64 images: Either provide a very small image (under 10KB) OR return "IMAGE_TOO_LARGE" as the value
+- Do not truncate base64 strings - if too long, use placeholder text instead
 
 For web scraping requests:
 1. Use the provided scraped data below
-2. Perform precise analysis on the actual data
-3. Return exact numerical values, not approximations
-4. For plots: generate actual matplotlib plots as base64 PNG data URI under 50KB (keep it smaller)
-5. Make sure base64 strings are complete and not cut off
+2. Perform precise analysis on the actual data  
+3. Return exact numerical values as strings
+4. For visualizations: create very small/simple plots or return descriptive text instead of large base64
+
+Example good response: ["1", "Titanic", "0.8996", "Small scatter plot generated"]
 
 Request to process:
 {questions_text}
@@ -128,10 +129,10 @@ Request to process:
         
         # Configure for more consistent JSON output
         generation_config = genai.types.GenerationConfig(
-            temperature=0.0,  # Very low for consistent formatting
-            top_p=0.8,
-            top_k=20,
-            max_output_tokens=32768,  # Increased token limit for complete responses
+            temperature=0.1,  # Slightly higher for better instruction following
+            top_p=0.9,
+            top_k=40,
+            max_output_tokens=8192,  # Reduced to prevent truncation issues
         )
         
         response = model.generate_content(
@@ -144,11 +145,20 @@ Request to process:
         
         generated_text = response.text.strip()
         
-        # Simply wrap the generated text in a JSON object and return
-        return {
-            "response": generated_text,
-            "status": "success"
-        }
+        # Clean up the response - remove newlines and extra whitespace from JSON
+        cleaned_response = generated_text.replace('\n', '').replace('  ', ' ').strip()
+        
+        # Try to parse as JSON first to validate and reformat
+        try:
+            parsed_json = json.loads(cleaned_response)
+            # Return the parsed JSON (FastAPI will serialize it properly)
+            return parsed_json
+        except json.JSONDecodeError:
+            # If it's not valid JSON, wrap it in our response format
+            return {
+                "response": cleaned_response,
+                "status": "success"
+            }
             
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error calling Gemini API: {str(e)}")
