@@ -1,5 +1,8 @@
 import os
 import json
+import re
+import requests
+from bs4 import BeautifulSoup
 import google.generativeai as genai
 from fastapi import FastAPI, File, UploadFile, HTTPException
 from fastapi.responses import JSONResponse
@@ -28,8 +31,57 @@ async def process_questions(
     except Exception as e:
         raise HTTPException(status_code=400, detail=f"Error reading questions.txt: {str(e)}")
     
+    # Check if questions involve web scraping and fetch data if needed
+    scraped_data = ""
+    if "wikipedia.org" in questions_text or "scrape" in questions_text.lower():
+        # Extract URL from the questions text
+        url_match = re.search(r'https?://[^\s]+', questions_text)
+        if url_match:
+            url = url_match.group()
+            try:
+                # Fetch Wikipedia data
+                headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'}
+                response = requests.get(url, headers=headers, timeout=10)
+                response.raise_for_status()
+                
+                soup = BeautifulSoup(response.content, 'html.parser')
+                
+                # Find the main table (usually the first sortable table)
+                table = soup.find('table', {'class': 'wikitable'})
+                if table:
+                    # Extract table data as CSV-like format
+                    rows = []
+                    headers = []
+                    
+                    # Get headers
+                    header_row = table.find('tr')
+                    if header_row:
+                        for th in header_row.find_all(['th', 'td']):
+                            headers.append(th.get_text().strip())
+                    
+                    # Get data rows
+                    for row in table.find_all('tr')[1:]:  # Skip header row
+                        cols = []
+                        for td in row.find_all(['td', 'th']):
+                            cols.append(td.get_text().strip())
+                        if cols:
+                            rows.append(cols)
+                    
+                    # Format as CSV-like text
+                    if headers and rows:
+                        scraped_data = f"Scraped Data from {url}:\n"
+                        scraped_data += ",".join(headers) + "\n"
+                        for row in rows[:50]:  # Limit to first 50 rows to avoid token limits
+                            scraped_data += ",".join(row) + "\n"
+                        
+            except Exception as e:
+                scraped_data = f"Error scraping data: {str(e)}"
+    
     # Read other files if provided
     prompt_parts = [f"Questions: {questions_text}"]
+    
+    if scraped_data:
+        prompt_parts.append(f"Scraped Data: {scraped_data}")
     
     if image_png:
         try:
