@@ -125,7 +125,7 @@ Additional data files:
     
     # Generate response using Gemini with better configuration
     try:
-        model = genai.GenerativeModel('gemini-2.0-flash-lite')
+        model = genai.GenerativeModel('gemini-2.5-flash')
         
         # Configure generation parameters for better accuracy
         generation_config = genai.types.GenerationConfig(
