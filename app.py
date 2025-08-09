@@ -10,78 +10,7 @@ import uvicorn
 
 app = FastAPI()
 
-def extract_json_from_text(text):
-    """Extract JSON from text that might contain markdown or other formatting"""
-    
-    # Remove markdown code blocks
-    cleaned_text = text
-    if "```json" in cleaned_text:
-        start = cleaned_text.find("```json") + 7
-        end = cleaned_text.find("```", start)
-        if end != -1:
-            cleaned_text = cleaned_text[start:end].strip()
-    elif "```" in cleaned_text:
-        start = cleaned_text.find("```") + 3
-        end = cleaned_text.find("```", start)
-        if end != -1:
-            cleaned_text = cleaned_text[start:end].strip()
-    
-    # Try parsing the cleaned text first
-    try:
-        return json.loads(cleaned_text)
-    except json.JSONDecodeError as e:
-        print(f"JSON decode error on cleaned text: {e}")
-        print(f"Cleaned text preview: {cleaned_text[:200]}...")
-    
-    # Try to find and extract complete JSON structures
-    # Look for JSON arrays first
-    array_start = cleaned_text.find('[')
-    if array_start != -1:
-        # Find the matching closing bracket by counting brackets
-        bracket_count = 0
-        array_end = -1
-        for i, char in enumerate(cleaned_text[array_start:], array_start):
-            if char == '[':
-                bracket_count += 1
-            elif char == ']':
-                bracket_count -= 1
-                if bracket_count == 0:
-                    array_end = i + 1
-                    break
-        
-        if array_end != -1:
-            json_candidate = cleaned_text[array_start:array_end]
-            try:
-                return json.loads(json_candidate)
-            except json.JSONDecodeError as e:
-                print(f"JSON decode error on array: {e}")
-                print(f"Array candidate preview: {json_candidate[:200]}...")
-    
-    # Try JSON objects
-    object_start = cleaned_text.find('{')
-    if object_start != -1:
-        # Find the matching closing brace by counting braces
-        brace_count = 0
-        object_end = -1
-        for i, char in enumerate(cleaned_text[object_start:], object_start):
-            if char == '{':
-                brace_count += 1
-            elif char == '}':
-                brace_count -= 1
-                if brace_count == 0:
-                    object_end = i + 1
-                    break
-        
-        if object_end != -1:
-            json_candidate = cleaned_text[object_start:object_end]
-            try:
-                return json.loads(json_candidate)
-            except json.JSONDecodeError as e:
-                print(f"JSON decode error on object: {e}")
-                print(f"Object candidate preview: {json_candidate[:200]}...")
-    
-    # If all else fails, return error
-    raise ValueError("Could not extract valid JSON from response")
+
 
 @app.post("/api/")
 async def process_questions(
@@ -215,32 +144,11 @@ Request to process:
         
         generated_text = response.text.strip()
         
-        # Use improved JSON extraction
-        try:
-            json_response = extract_json_from_text(generated_text)
-            return json_response
-            
-        except ValueError as e:
-            # Debug: Let's see what's actually in the response
-            print(f"Generated text length: {len(generated_text)}")
-            print(f"Generated text preview: {generated_text[:500]}")
-            print(f"Generated text ending: {generated_text[-200:]}")
-            
-            # Try one more fallback - maybe it's just valid JSON with whitespace
-            try:
-                # Strip all whitespace and try direct parsing
-                stripped_text = generated_text.strip()
-                return json.loads(stripped_text)
-            except json.JSONDecodeError:
-                pass
-            
-            # Return the raw text wrapped in an error object if JSON parsing completely fails
-            return {
-                "error": "Could not parse JSON", 
-                "raw_response": generated_text[:500],  # Increased limit
-                "response_length": len(generated_text),
-                "details": str(e)
-            }
+        # Simply wrap the generated text in a JSON object and return
+        return {
+            "response": generated_text,
+            "status": "success"
+        }
             
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error calling Gemini API: {str(e)}")
