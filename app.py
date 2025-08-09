@@ -43,7 +43,7 @@ async def process_questions(
         raise HTTPException(status_code=500, detail="GEMINI_API_KEY environment variable not set")
     
     # Prepare Gemini API request
-    gemini_url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-pro:generateContent?key={api_key}"
+    gemini_url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key={api_key}"
     
     payload = {
         "contents": [{
