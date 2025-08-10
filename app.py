@@ -107,16 +107,19 @@ CRITICAL INSTRUCTIONS:
 - Respond with ONLY a valid JSON array or object - no markdown, no explanations, no extra text
 - Do NOT use line breaks (\\n) or extra whitespace in your JSON response
 - Make JSON compact and properly formatted
-- For base64 images: Either provide a very small image (under 10KB) OR return "IMAGE_TOO_LARGE" as the value
-- Do not truncate base64 strings - if too long, use placeholder text instead
+- For ANY visualization/chart/plot requests: Return the original question text as the value instead of creating images
+- Do NOT generate base64 images, plots, or charts - just return the question text for those fields
+- Perform all calculations and data analysis accurately
+- Return exact numerical values as strings
 
 For web scraping requests:
 1. Use the provided scraped data below
 2. Perform precise analysis on the actual data  
 3. Return exact numerical values as strings
-4. For visualizations: create very small/simple plots or return descriptive text instead of large base64
+4. For any visualization requests: Use the original question text as the value
 
-Example good response: ["1", "Titanic", "0.8996", "Small scatter plot generated"]
+Example response format:
+{{"total_sales": "1140", "top_region": "West", "bar_chart": "Plot total sales by region as a bar chart with blue bars", "correlation": "0.85"}}
 
 Request to process:
 {questions_text}
@@ -157,7 +160,7 @@ Request to process:
             # If it's not valid JSON, wrap it in our response format
             return {
                 "response": cleaned_response,
-                "status": "success"
+                "status": "success",
             }
             
     except Exception as e:
@@ -165,7 +168,7 @@ Request to process:
 
 @app.get("/")
 async def health_check():
-    return {"status": "healthy", "version": "1.1"}
+    return {"status": "healthy", "version": "1.2"}
 
 if __name__ == "__main__":
     uvicorn.run(app, host="0.0.0.0", port=int(os.getenv("PORT", 8000)))
