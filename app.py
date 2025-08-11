@@ -128,7 +128,7 @@ Request to process:
     
     # Generate response using Gemini with stricter configuration
     try:
-        model = genai.GenerativeModel('gemini-2.5-flash')  # Updated model
+        model = genai.GenerativeModel('gemini-2.5-pro')  # Updated model
         
         # Configure for more consistent JSON output
         generation_config = genai.types.GenerationConfig(

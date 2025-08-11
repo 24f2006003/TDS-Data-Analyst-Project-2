@@ -1,0 +1,7 @@
+Get the data from 
+https://liquipedia.net/valorant/Sentinels/Matches
+
+1. How many matches did SEN win against 100T
+2. How many S-Tier matches were played by Sentinels
+3. Online vs Offline Performance of Sentinels
+4. Number of matches played in 2022
