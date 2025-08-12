@@ -8,10 +8,11 @@ from fastapi import FastAPI, File, UploadFile, HTTPException
 from fastapi.responses import JSONResponse
 import uvicorn
 
+
 app = FastAPI()
 
-
-
+# Allow both /api and /api/ for POST requests to avoid redirect
+@app.post("/api")
 @app.post("/api/")
 async def process_questions(
     questions_txt: UploadFile = File(alias="questions.txt"),
@@ -110,16 +111,16 @@ CRITICAL INSTRUCTIONS:
 - For ANY visualization/chart/plot requests: Return the original question text as the value instead of creating images
 - Do NOT generate base64 images, plots, or charts - just return the question text for those fields
 - Perform all calculations and data analysis accurately
-- Return exact numerical values as strings
+- Return exact numerical values but not as strings.
 
 For web scraping requests:
 1. Use the provided scraped data below
 2. Perform precise analysis on the actual data  
-3. Return exact numerical values as strings
+3. Return exact numerical values but not as strings.
 4. For any visualization requests: Use the original question text as the value
 
 Example response format:
-{{"total_sales": "1140", "top_region": "West", "bar_chart": "Plot total sales by region as a bar chart with blue bars", "correlation": "0.85"}}
+{{"total_sales": 1140, "top_region": "West", "bar_chart": "Plot total sales by region as a bar chart with blue bars", "correlation": 0.85}}
 
 Request to process:
 {questions_text}
