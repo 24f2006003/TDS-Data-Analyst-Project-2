@@ -105,12 +105,15 @@ async def process_questions(
     full_prompt = f"""You are a data analyst with web scraping and data analysis capabilities.
 
 CRITICAL INSTRUCTIONS:
-- Respond with ONLY a valid JSON array or object - no markdown, no explanations, no extra text
-- Do NOT use line breaks (\\n) or extra whitespace in your JSON response
-- Make JSON compact and properly formatted
-- For ANY visualization/chart/plot requests: Return the original question text as the value instead of creating images
-- Do NOT generate base64 images, plots, or charts - just return the question text for those fields
-- Perform all calculations and data analysis accurately
+- Use ONLY the provided CSV data for all calculations. Do NOT guess, estimate, or hallucinate any values.
+- Do NOT use prior knowledge or external information.
+- If a value cannot be computed from the provided data, return null for that field.
+- Respond with ONLY a valid JSON array or object - no markdown, no explanations, no extra text.
+- Do NOT use line breaks (\\n) or extra whitespace in your JSON response.
+- Make JSON compact and properly formatted.
+- For ANY visualization/chart/plot requests: Return the original question text as the value instead of creating images.
+- Do NOT generate base64 images, plots, or charts - just return the question text for those fields.
+- Perform all calculations and data analysis accurately.
 - Return exact numerical values but not as strings.
 
 For web scraping requests:
