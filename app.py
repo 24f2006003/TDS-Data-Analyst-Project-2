@@ -102,29 +102,30 @@ async def process_questions(
             raise HTTPException(status_code=400, detail=f"Error reading data.csv: {str(e)}")
     
     # Create the full prompt with strict formatting requirements
+    csv_section = f"\nBelow is the CSV data to use for all calculations:\n{csv_text}" if data_csv else ""
     full_prompt = f"""You are a data analyst with web scraping and data analysis capabilities.
 
 CRITICAL INSTRUCTIONS:
-- Respond with ONLY a valid JSON array or object - no markdown, no explanations, no extra text
-- Do NOT use line breaks (\\n) or extra whitespace in your JSON response
-- Make JSON compact and properly formatted
-- For ANY visualization/chart/plot requests: Return the original question text as the value instead of creating images
-- Do NOT generate base64 images, plots, or charts - just return the question text for those fields
-- Perform all calculations and data analysis accurately
+- Use ONLY the provided CSV data for all calculations. Do NOT guess, estimate, or hallucinate any values. Do NOT use prior knowledge or external information.
+- If a value cannot be computed directly from the provided data, return null for that field.
+- For each answer, show step-by-step calculation using only the CSV data. Reference the CSV header and rows as needed.
+- Do NOT output anything that cannot be derived from the CSV data.
+- If the CSV data is missing or incomplete, return null for all fields that cannot be computed.
+- Respond with ONLY a valid JSON array or object - no markdown, no explanations, no extra text.
+- Do NOT use line breaks (\\n) or extra whitespace in your JSON response.
+- Make JSON compact and properly formatted.
+- For ANY visualization/chart/plot requests: Return the original question text as the value instead of creating images.
+- Do NOT generate base64 images, plots, or charts - just return the question text for those fields.
+- Perform all calculations and data analysis accurately.
 - Return exact numerical values but not as strings.
 
-For web scraping requests:
-1. Use the provided scraped data below
-2. Perform precise analysis on the actual data  
-3. Return exact numerical values but not as strings.
-4. For any visualization requests: Use the original question text as the value
+WARNING: If you hallucinate or use information not present in the CSV, your answer will be considered incorrect.
 
-Example response format:
-{{"total_sales": 1140, "top_region": "West", "bar_chart": "Plot total sales by region as a bar chart with blue bars", "correlation": 0.85}}
+Below is the CSV data to use for all calculations:
+{csv_text if data_csv else ''}
 
 Request to process:
 {questions_text}
-
 """ + "\n".join([part for part in prompt_parts[1:] if part])
     
     # Generate response using Gemini with stricter configuration
